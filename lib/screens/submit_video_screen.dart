@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/firestore_service.dart'; // Asumsi punya ini untuk simpan ke Firestore
+import 'auth/login_screen.dart';
 
 class SubmitVideoScreen extends StatefulWidget {
   @override
@@ -28,7 +29,24 @@ class _SubmitVideoScreenState extends State<SubmitVideoScreen> {
     if (!authProvider.isLoggedIn) {
       return Scaffold(
         appBar: AppBar(title: Text('Submit Video')),
-        body: Center(child: Text('Please login to submit video')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Please login to submit video'),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => LoginScreen()),
+                  );
+                },
+                child: Text('Go to Login'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -77,9 +95,13 @@ class _SubmitVideoScreenState extends State<SubmitVideoScreen> {
                     try {
                       // Simpan ke Firestore via service
                       final firestoreService = FirestoreService();
+                      final username = authProvider.userModel?.name ?? 
+                                      authProvider.user!.displayName ?? 
+                                      'Anonymous';
+                      
                       await firestoreService.submitVideo(
                         authProvider.user!.uid,
-                        authProvider.user!.displayName ?? 'Anonymous',
+                        username,
                         _linkController.text,
                         _category,
                       );

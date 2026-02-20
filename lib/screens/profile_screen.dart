@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'auth/login_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   @override
@@ -12,11 +13,29 @@ class ProfileScreen extends StatelessWidget {
     if (!authProvider.isLoggedIn) {
       return Scaffold(
         appBar: AppBar(title: Text('Profile')),
-        body: Center(child: Text('Please login to view profile')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Please login to view profile'),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => LoginScreen()),
+                  );
+                },
+                child: Text('Go to Login'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
     final user = authProvider.user!;
+    final userModel = authProvider.userModel;
 
     return Scaffold(
       appBar: AppBar(title: Text('Profile/Settings')),
@@ -26,7 +45,7 @@ class ProfileScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Username: ${user.displayName ?? 'N/A'}',
+              'Username: ${userModel?.name ?? user.displayName ?? 'N/A'}',
               style: TextStyle(fontSize: 18),
             ),
             SizedBox(height: 10),

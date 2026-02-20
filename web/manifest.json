@@ -1,12 +1,12 @@
 {
-    "name": "tasmile",
-    "short_name": "tasmile",
+    "name": "Try Not To Smile",
+    "short_name": "TryNotToSmile",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#2196F3",
+    "theme_color": "#2196F3",
+    "description": "Try Not To Smile Challenge Game with Admin Panel",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

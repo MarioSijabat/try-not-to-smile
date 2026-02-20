@@ -18,21 +18,39 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Try Not To Smile - Challenge Game with Admin Panel">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="tasmile">
+  <meta name="apple-mobile-web-app-title" content="Try Not To Smile">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>tasmile</title>
+  <title>Try Not To Smile - Admin Panel</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+  <script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBjkOM7ZE8X7A3kZGW9Tan7QU6-73psxdQ",
+    authDomain: "try-not-to-smile-d3e6a.firebaseapp.com",
+    projectId: "try-not-to-smile-d3e6a",
+    storageBucket: "try-not-to-smile-d3e6a.firebasestorage.app", // ← INI BENAR
+    messagingSenderId: "614555758902",
+    appId: "1:614555758902:web:1234567890abcdef" // ← GANTI DENGAN ASLI
+  };
+  
+  firebase.initializeApp(firebaseConfig);
+  console.log('Firebase initialized with Storage');
+</script>
 </body>
 </html>

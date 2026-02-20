@@ -34,7 +34,7 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  firebase_core: ^3.15.2
+  firebase_core: ^4.4.0  # Update ke versi terbaru
 
 dev_dependencies:
   flutter_test:
@@ -42,12 +42,17 @@ dev_dependencies:
 
   # tambah disini!! (ini developer yang otak-atik)
   provider: ^6.1.2  # State management
-  firebase_auth: ^5.3.1  # Auth
-  cloud_firestore: ^5.4.4  # Firestore
-  firebase_storage: ^12.3.3  # Storage
-  tflite_flutter: ^0.10.4  # Untuk TFLite AI (nanti integrasi)
+  firebase_auth: ^6.1.4  # Update Auth
+  cloud_firestore: ^6.1.2  # Update Firestore
+  firebase_storage: ^13.0.6  # Update Storage
   camera: ^0.11.0  # Untuk camera preview
-  video_player: ^2.9.1  # Untuk play .mp4 dari Storage
+  permission_handler: ^11.0.1
+  chewie: ^1.7.3            # TAMBAH INI!
+  uuid: ^4.2.0  
+  video_player: ^2.9.1   # Untuk play .mp4 dari Storage
+  intl: ^0.19.0  # Date formatting
+  url_launcher: ^6.3.0  # Untuk open link di browser
+  google_ml_kit: ^0.16.0
 
   #sampai sini otak-atik nya
 
