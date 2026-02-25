@@ -9,6 +9,10 @@ plugins {
 android {
     namespace = "com.example.tasmile"
     compileSdk = flutter.compileSdkVersion
+
+    aaptOptions {
+        noCompress += listOf("tflite")
+    }
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
