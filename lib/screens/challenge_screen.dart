@@ -43,6 +43,7 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
 
   // Throttle: jaga agar inferensi tidak terlalu sering
   bool _isProcessing = false;
+  bool _isTFLiteProcessing = false;
 
   @override
   void initState() {
@@ -54,9 +55,11 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     // Cek permission kamera dulu
     final status = await Permission.camera.request();
     if (!status.isGranted) {
-      setState(() {
-        _errorMessage = 'Izin kamera diperlukan untuk challenge';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Izin kamera diperlukan untuk challenge';
+        });
+      }
       return;
     }
 
@@ -75,19 +78,24 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
 
   Future<void> _initializeDetectors() async {
     // ML Kit face detector (ringan, hanya cek ada tidaknya wajah)
+    // ML Kit hanya untuk deteksi posisi wajah (bounding box).
+    // Smile detection sepenuhnya dilakukan oleh MobileNet.
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        enableClassification: false, // Nonaktifkan — kita pakai MobileNet
+        enableClassification: false, // tidak perlu smile prob dari ML Kit
         minFaceSize: 0.15,
+        performanceMode: FaceDetectorMode.fast,
       ),
     );
 
-    // MobileNet model
+    // Inisialisasi MobileNet (paralel dengan kamera)
     await _smileService.initialize();
 
-    setState(() {
-      _isModelReady = _smileService.isInitialized;
-    });
+    if (mounted) {
+      setState(() {
+        _isModelReady = _smileService.isInitialized;
+      });
+    }
   }
 
   Future<void> _initializeCamera() async {
@@ -107,9 +115,11 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     await _cameraController!.initialize();
     await _cameraController!.startImageStream(_processCameraImage);
 
-    setState(() {
-      _isCameraInitialized = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isCameraInitialized = true;
+      });
+    }
   }
 
   Future<void> _initializeVideo() async {
@@ -126,70 +136,85 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
       }
     });
 
-    setState(() {
-      _isVideoInitialized = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isVideoInitialized = true;
+      });
+    }
   }
 
   /// Proses frame kamera: Hybrid ML Kit (deteksi wajah) + MobileNet (klasifikasi senyum)
   void _processCameraImage(CameraImage image) async {
-    if (!_challengeActive || _isProcessing) return;
+    if (!_challengeActive || _isProcessing || !mounted) return;
     if (_faceDetector == null || !_isModelReady) return;
 
     _isProcessing = true;
 
     try {
-      // Step 1: ML Kit — cek apakah ada wajah di frame
-      final WriteBuffer allBytes = WriteBuffer();
-      for (final Plane plane in image.planes) {
-        allBytes.putUint8List(plane.bytes);
-      }
-      final bytes = allBytes.done().buffer.asUint8List();
-
       final camera = _cameras!.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.front,
         orElse: () => _cameras!.first,
       );
 
-      final inputImage = InputImage.fromBytes(
-        bytes: bytes,
-        metadata: InputImageMetadata(
-          size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation: _getRotation(camera.sensorOrientation),
-          format: InputImageFormat.nv21,
-          bytesPerRow: image.planes[0].bytesPerRow,
-        ),
-      );
+      // ── Fix: Bangun bytes NV21 yang valid ──────────────────────────────
+      // Hanya 2 plane yang dibutuhkan: Y + interleaved VU
+      final inputImage = _buildInputImage(image, camera);
+      if (inputImage == null) {
+        _isProcessing = false;
+        return;
+      }
 
+      // Step 1: ML Kit — cek apakah ada wajah di frame
       final List<Face> faces = await _faceDetector!.processImage(inputImage);
 
-      // Jika ada wajah terdeteksi ML Kit → jalankan MobileNet
+      // Rule 1: Find largest face
+      Face? largestFace;
       if (faces.isNotEmpty) {
-        final smileProb = await _smileService.detectSmile(image);
-
-        // smileProb -1.0 berarti error model, skip frame ini
-        if (smileProb >= 0.0) {
-          final isCurrentlySmiling = smileProb > 0.72;
-
-          if (isCurrentlySmiling && !_isSmiling) {
-            if (mounted) {
-              setState(() {
-                _isSmiling = true;
-                _smileCount++;
-              });
-            }
-            HapticFeedback.lightImpact();
-
-            if (_challengeActive) {
-              _failChallenge();
-            }
-          } else if (!isCurrentlySmiling && _isSmiling) {
-            if (mounted) {
-              setState(() {
-                _isSmiling = false;
-              });
-            }
+        double maxArea = 0;
+        for (final face in faces) {
+          final box = face.boundingBox;
+          final area = box.width * box.height;
+          if (area > maxArea) {
+            maxArea = area;
+            largestFace = face;
           }
+        }
+      }
+
+      // Rule 3: Trigger TFLite without blocking the next camera frame
+      if (largestFace != null) {
+        if (!_isTFLiteProcessing) {
+          _isTFLiteProcessing = true;
+          _smileService.detectSmile(
+            image,
+            largestFace.boundingBox,
+            camera.sensorOrientation,
+          ).then((result) {
+            if (result != null && mounted) {
+              final double smileScore = result['smileScore'] ?? 0.0;
+              final isCurrentlySmiling = smileScore > 0.55;
+
+              if (isCurrentlySmiling && !_isSmiling) {
+                setState(() {
+                  _isSmiling = true;
+                  _smileCount++;
+                });
+                HapticFeedback.lightImpact();
+
+                if (_challengeActive) {
+                  _failChallenge();
+                }
+              } else if (!isCurrentlySmiling && _isSmiling) {
+                setState(() {
+                  _isSmiling = false;
+                });
+              }
+            }
+          }).catchError((e) {
+            debugPrint('[ChallengeScreen] TFLite error: $e');
+          }).whenComplete(() {
+            _isTFLiteProcessing = false;
+          });
         }
       } else {
         // Tidak ada wajah — reset state senyum
@@ -200,22 +225,70 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
         }
       }
     } catch (e) {
-      debugPrint('Error processing camera image: $e');
+      debugPrint('[ChallengeScreen] Frame error: $e');
     } finally {
+      // Allow the next camera frame to be processed by ML Kit immediately
       _isProcessing = false;
     }
   }
 
-  InputImageRotation _getRotation(int sensorOrientation) {
-    switch (sensorOrientation) {
-      case 90:
-        return InputImageRotation.rotation90deg;
-      case 180:
-        return InputImageRotation.rotation180deg;
-      case 270:
-        return InputImageRotation.rotation270deg;
-      default:
-        return InputImageRotation.rotation0deg;
+  /// Konversi CameraImage (yuv_420_888) ke NV21 bersih tanpa stride padding.
+  /// ML Kit butuh NV21 dengan bytesPerRow = width (tanpa padding).
+  InputImage? _buildInputImage(CameraImage image, CameraDescription cam) {
+    try {
+      final width  = image.width;
+      final height = image.height;
+
+      final yPlane = image.planes[0];
+      final uPlane = image.planes.length > 1 ? image.planes[1] : null;
+      final vPlane = image.planes.length > 2 ? image.planes[2] : null;
+
+      // Buffer NV21: Y plane (w*h) + interleaved VU (w*h/2)
+      final nv21 = Uint8List(width * height + (width * height) ~/ 2);
+
+      // ── Salin Y plane (strip padding per baris) ────────────────────────
+      for (int row = 0; row < height; row++) {
+        final srcStart = row * yPlane.bytesPerRow;
+        final dstStart = row * width;
+        nv21.setRange(dstStart, dstStart + width, yPlane.bytes, srcStart);
+      }
+
+      // ── Interleave VU (NV21: V dulu, lalu U) ──────────────────────────
+      int uvOffset = width * height;
+      if (vPlane != null && uPlane != null) {
+        final uvHeight = height ~/ 2;
+        final uvWidth  = width  ~/ 2;
+        final vStride  = vPlane.bytesPerRow;
+        final uStride  = uPlane.bytesPerRow;
+        final vPixel   = vPlane.bytesPerPixel ?? 1;
+        final uPixel   = uPlane.bytesPerPixel ?? 1;
+
+        for (int row = 0; row < uvHeight; row++) {
+          for (int col = 0; col < uvWidth; col++) {
+            final vIdx = row * vStride + col * vPixel;
+            final uIdx = row * uStride + col * uPixel;
+            nv21[uvOffset++] = vIdx < vPlane.bytes.length ? vPlane.bytes[vIdx] : 128;
+            nv21[uvOffset++] = uIdx < uPlane.bytes.length ? uPlane.bytes[uIdx] : 128;
+          }
+        }
+      }
+
+      // Gunakan sensor orientation langsung (tanpa flip)
+      final rotation = InputImageRotationValue.fromRawValue(cam.sensorOrientation);
+      if (rotation == null) return null;
+
+      return InputImage.fromBytes(
+        bytes: nv21,
+        metadata: InputImageMetadata(
+          size: Size(width.toDouble(), height.toDouble()),
+          rotation: rotation,
+          format: InputImageFormat.nv21,
+          bytesPerRow: width, // NV21 bersih = width, tanpa padding
+        ),
+      );
+    } catch (e) {
+      debugPrint('[ChallengeScreen] buildInputImage error: $e');
+      return null;
     }
   }
 

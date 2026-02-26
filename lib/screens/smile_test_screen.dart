@@ -18,7 +18,7 @@ class SmileTestScreen extends StatefulWidget {
 }
 
 class _SmileTestScreenState extends State<SmileTestScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin { 
   CameraController? _camera;
   List<CameraDescription>? _cameras;
   FaceDetector? _mlkitDetector;
@@ -42,7 +42,7 @@ class _SmileTestScreenState extends State<SmileTestScreen>
   late AnimationController _pulseCtrl;
   late Animation<double> _pulseAnim;
 
-  static const double _smileThreshold = 0.65;
+  static const double _smileThreshold = 0.55;
 
   @override
   void initState() {

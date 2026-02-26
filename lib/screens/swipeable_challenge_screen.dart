@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/active_video_model.dart';
+import '../services/face_detection_service.dart';
 
 class SwipeableChallengeScreen extends StatefulWidget {
   final List<ActiveVideoModel> videos;
@@ -26,6 +27,10 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
   FaceDetector? _faceDetector;
   bool _isCameraInitialized = false;
 
+  // ── MobileNet ────────────────────────────────────────────────────────────
+  final SmileDetectionService _smileService = SmileDetectionService();
+  bool _isModelReady = false;
+
   // ── Per-video controllers ─────────────────────────────────────────────────
   final Map<int, VideoPlayerController> _videoControllers = {};
   int _currentIndex = 0;
@@ -35,6 +40,7 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
   int _smileCount = 0;
   bool _challengeFailed = false;
   bool _processingFace = false;
+  bool _isTFLiteProcessing = false;
 
   late PageController _pageController;
   String? _errorMessage;
@@ -45,7 +51,13 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
     _pageController = PageController();
     _initCamera();
     _initFaceDetector();
+    _initMobileNet();
     _initVideoAt(0);
+  }
+
+  Future<void> _initMobileNet() async {
+    await _smileService.initialize();
+    if (mounted) setState(() => _isModelReady = _smileService.isInitialized);
   }
 
   // ── Camera ────────────────────────────────────────────────────────────────
@@ -166,55 +178,132 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
 
   // ── Face detection ────────────────────────────────────────────────────────
   void _processCameraImage(CameraImage image) async {
-    if (_faceDetector == null || _challengeFailed || _processingFace) return;
+    if (_faceDetector == null || !_isModelReady || _challengeFailed || _processingFace) return;
     _processingFace = true;
 
     try {
-      final WriteBuffer allBytes = WriteBuffer();
-      for (final plane in image.planes) allBytes.putUint8List(plane.bytes);
-      final bytes = allBytes.done().buffer.asUint8List();
-
       final camera = _cameras!.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.front,
         orElse: () => _cameras!.first,
       );
 
-      final inputImage = InputImage.fromBytes(
-        bytes: bytes,
-        metadata: InputImageMetadata(
-          size: Size(image.width.toDouble(), image.height.toDouble()),
-          rotation: _getRotation(camera.sensorOrientation),
-          format: InputImageFormat.nv21,
-          bytesPerRow: image.planes[0].bytesPerRow,
-        ),
-      );
+      final inputImage = _buildInputImage(image, camera);
+      if (inputImage == null) {
+        _processingFace = false;
+        return;
+      }
 
       final faces = await _faceDetector!.processImage(inputImage);
 
       if (!mounted) return;
 
+      Face? largestFace;
       if (faces.isNotEmpty) {
-        final smilingProb = faces.first.smilingProbability ?? 0.0;
-        final smiling = smilingProb > 0.7;
+        double maxArea = 0;
+        for (final face in faces) {
+          final box = face.boundingBox;
+          final area = box.width * box.height;
+          if (area > maxArea) {
+            maxArea = area;
+            largestFace = face;
+          }
+        }
+      }
 
-        if (smiling && !_isSmiling && !_challengeFailed) {
-          setState(() {
-            _isSmiling = true;
-            _smileCount++;
-            _challengeFailed = true;
+      if (largestFace != null) {
+        if (!_isTFLiteProcessing) {
+          _isTFLiteProcessing = true;
+          _smileService.detectSmile(
+            image,
+            largestFace.boundingBox,
+            camera.sensorOrientation,
+          ).then((result) {
+            if (result != null && mounted) {
+              final double smileScore = result['smileScore'] ?? 0.0;
+              final isCurrentlySmiling = smileScore > 0.55;
+
+              if (isCurrentlySmiling && !_isSmiling && !_challengeFailed) {
+                setState(() {
+                  _isSmiling = true;
+                  _smileCount++;
+                  _challengeFailed = true;
+                });
+                HapticFeedback.lightImpact();
+                _videoControllers[_currentIndex]?.pause();
+                _cameraController?.stopImageStream();
+                _showFailDialog();
+              } else if (!isCurrentlySmiling && _isSmiling) {
+                setState(() => _isSmiling = false);
+              }
+            }
+          }).catchError((e) {
+            debugPrint('[SwipeableChallenge] TFLite error: $e');
+          }).whenComplete(() {
+            _isTFLiteProcessing = false;
           });
-          HapticFeedback.lightImpact();
-          _videoControllers[_currentIndex]?.pause();
-          _cameraController?.stopImageStream();
-          _showFailDialog();
-        } else if (!smiling && _isSmiling) {
+        }
+      } else {
+        if (_isSmiling && mounted) {
           setState(() => _isSmiling = false);
         }
       }
     } catch (_) {
-      // Ignore processing errors
     } finally {
       _processingFace = false;
+    }
+  }
+
+  InputImage? _buildInputImage(CameraImage image, CameraDescription cam) {
+    try {
+      final width  = image.width;
+      final height = image.height;
+
+      final yPlane = image.planes[0];
+      final uPlane = image.planes.length > 1 ? image.planes[1] : null;
+      final vPlane = image.planes.length > 2 ? image.planes[2] : null;
+
+      final nv21 = Uint8List(width * height + (width * height) ~/ 2);
+
+      for (int row = 0; row < height; row++) {
+        final srcStart = row * yPlane.bytesPerRow;
+        final dstStart = row * width;
+        nv21.setRange(dstStart, dstStart + width, yPlane.bytes, srcStart);
+      }
+
+      int uvOffset = width * height;
+      if (vPlane != null && uPlane != null) {
+        final uvHeight = height ~/ 2;
+        final uvWidth  = width  ~/ 2;
+        final vStride  = vPlane.bytesPerRow;
+        final uStride  = uPlane.bytesPerRow;
+        final vPixel   = vPlane.bytesPerPixel ?? 1;
+        final uPixel   = uPlane.bytesPerPixel ?? 1;
+
+        for (int row = 0; row < uvHeight; row++) {
+          for (int col = 0; col < uvWidth; col++) {
+            final vIdx = row * vStride + col * vPixel;
+            final uIdx = row * uStride + col * uPixel;
+            nv21[uvOffset++] = vIdx < vPlane.bytes.length ? vPlane.bytes[vIdx] : 128;
+            nv21[uvOffset++] = uIdx < uPlane.bytes.length ? uPlane.bytes[uIdx] : 128;
+          }
+        }
+      }
+
+      final rotation = InputImageRotationValue.fromRawValue(cam.sensorOrientation);
+      if (rotation == null) return null;
+
+      return InputImage.fromBytes(
+        bytes: nv21,
+        metadata: InputImageMetadata(
+          size: Size(width.toDouble(), height.toDouble()),
+          rotation: rotation,
+          format: InputImageFormat.nv21,
+          bytesPerRow: width,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[SwipeableChallenge] buildInputImage error: $e');
+      return null;
     }
   }
 
@@ -330,6 +419,7 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
     _cameraController?.dispose();
     for (final c in _videoControllers.values) c.dispose();
     _faceDetector?.close();
+    _smileService.dispose();
     super.dispose();
   }
 
