@@ -8,13 +8,17 @@ import '../services/admin_panel_service.dart';
 
 class VideoProvider extends ChangeNotifier {
   final AdminPanelService _service = AdminPanelService();
-  List<ActiveVideoModel> videos = [];
+
+  List<ActiveVideoModel> _allVideos = [];
+  List<ActiveVideoModel> videos = [];   // filtered list (dipakai UI)
   bool isLoading = true;
+  String? selectedCategoryId;           // null = semua kategori
+
   StreamSubscription<List<Map<String, dynamic>>>? _sub;
 
   VideoProvider() {
     _sub = _service.getActiveVideos().listen((list) {
-      videos = list.map((m) {
+      _allVideos = list.map((m) {
         return ActiveVideoModel(
           docId: (m['docId'] ?? m['doc_id'])?.toString(),
           title: m['title'] as String?,
@@ -31,14 +35,32 @@ class VideoProvider extends ChangeNotifier {
           deletedAt: m['deleted_at'] as Timestamp?,
           deletedBy: m['deleted_by'] as String?,
           expireAt: m['expire_at'] as Timestamp?,
+          categoryId: m['category_id'] as String?,
         );
       }).toList();
       isLoading = false;
-      notifyListeners();
+      _applyFilter();
     }, onError: (e) {
       isLoading = false;
       notifyListeners();
     });
+  }
+
+  /// Set kategori aktif dan filter ulang daftar video
+  void setCategory(String? categoryId) {
+    selectedCategoryId = categoryId;
+    _applyFilter();
+  }
+
+  void _applyFilter() {
+    if (selectedCategoryId == null) {
+      videos = List.from(_allVideos);
+    } else {
+      videos = _allVideos
+          .where((v) => v.categoryId == selectedCategoryId)
+          .toList();
+    }
+    notifyListeners();
   }
 
   @override

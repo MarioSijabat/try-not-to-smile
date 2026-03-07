@@ -18,6 +18,7 @@ class ActiveVideoModel {
   final Timestamp? deletedAt;
   final String? deletedBy;
   final Timestamp? expireAt;
+  final String? categoryId;  // ← kategori video
 
   ActiveVideoModel({
     this.docId,
@@ -35,6 +36,7 @@ class ActiveVideoModel {
     this.deletedAt,
     this.deletedBy,
     this.expireAt,
+    this.categoryId,
   });
 
   // From JSON (Firestore data)
@@ -55,6 +57,7 @@ class ActiveVideoModel {
       deletedAt: json['deleted_at'] as Timestamp?,
       deletedBy: json['deleted_by'] as String?,
       expireAt: json['expire_at'] as Timestamp?,
+      categoryId: json['category_id'] as String?,
     );
   }
 
@@ -76,6 +79,7 @@ class ActiveVideoModel {
       'deleted_at': deletedAt,
       'deleted_by': deletedBy,
       'expire_at': expireAt,
+      'category_id': categoryId,
     };
   }
 }

@@ -1,0 +1,29 @@
+﻿=== PERFORMANCE RESULTS === 2026-03-05 09:22
+Device: CPH2375 | Mode: DEBUG | Duration: ~2 menit
+
+FPS | N=131 Min=3 Mean=6.6 Median=7 P95=8 Max=8
+MLKit_ms | N=131 Min=113 Mean=128 Median=128 P95=137 Max=147
+TFLite_ms | N=131 Min=245 Mean=283.5 Median=283 P95=316 Max=336
+Total_ms | N=131 Min=140 Mean=252.3 Median=257 P95=283 Max=292
+
+=== RAW SAMPLE (first 20 lines) ===
+[PERF] 09:12:30 | FPS:3 | MLKit:127ms | TFLite:264ms | Total:215ms
+[PERF] 09:12:31 | FPS:7 | MLKit:129ms | TFLite:295ms | Total:247ms
+[PERF] 09:12:32 | FPS:5 | MLKit:129ms | TFLite:289ms | Total:244ms
+[PERF] 09:12:33 | FPS:5 | MLKit:125ms | TFLite:306ms | Total:263ms
+[PERF] 09:12:34 | FPS:7 | MLKit:128ms | TFLite:293ms | Total:258ms
+[PERF] 09:12:35 | FPS:6 | MLKit:128ms | TFLite:291ms | Total:264ms
+[PERF] 09:12:37 | FPS:7 | MLKit:129ms | TFLite:281ms | Total:260ms
+[PERF] 09:12:38 | FPS:8 | MLKit:129ms | TFLite:272ms | Total:257ms
+[PERF] 09:12:39 | FPS:7 | MLKit:127ms | TFLite:262ms | Total:259ms
+[PERF] 09:12:40 | FPS:7 | MLKit:127ms | TFLite:250ms | Total:253ms
+[PERF] 09:12:41 | FPS:6 | MLKit:124ms | TFLite:261ms | Total:255ms
+[PERF] 09:12:42 | FPS:6 | MLKit:127ms | TFLite:264ms | Total:259ms
+[PERF] 09:12:43 | FPS:6 | MLKit:132ms | TFLite:262ms | Total:263ms
+[PERF] 09:12:44 | FPS:6 | MLKit:137ms | TFLite:276ms | Total:284ms
+[PERF] 09:12:46 | FPS:6 | MLKit:145ms | TFLite:274ms | Total:283ms
+[PERF] 09:12:47 | FPS:7 | MLKit:147ms | TFLite:272ms | Total:292ms
+[PERF] 09:12:48 | FPS:6 | MLKit:143ms | TFLite:265ms | Total:285ms
+[PERF] 09:12:49 | FPS:6 | MLKit:144ms | TFLite:269ms | Total:288ms
+[PERF] 09:12:50 | FPS:6 | MLKit:136ms | TFLite:257ms | Total:274ms
+[PERF] 09:12:51 | FPS:6 | MLKit:131ms | TFLite:261ms | Total:253ms

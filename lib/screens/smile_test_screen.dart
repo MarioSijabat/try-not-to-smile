@@ -44,6 +44,59 @@ class _SmileTestScreenState extends State<SmileTestScreen>
 
   static const double _smileThreshold = 0.55;
 
+  // ── Performance Overlay ──────────────────────────────────────────────
+  bool _showPerfOverlay = false;
+  int _currentFps = 0;
+  int _frameCount = 0;
+  DateTime _lastFpsTime = DateTime.now();
+  int _mlKitLatencyMs = 0;
+  int _tfliteLatencyMs = 0;
+  int _totalLatencyMs = 0;
+  // Rolling average (last 30 frames)
+  final List<int> _mlKitHistory = [];
+  final List<int> _tfliteHistory = [];
+  final List<int> _totalHistory = [];
+  static const int _historyMax = 30;
+
+  void _recordPerf(int mlKit, int tflite, int total) {
+    _mlKitHistory.add(mlKit);
+    _tfliteHistory.add(tflite);
+    _totalHistory.add(total);
+    if (_mlKitHistory.length > _historyMax) _mlKitHistory.removeAt(0);
+    if (_tfliteHistory.length > _historyMax) _tfliteHistory.removeAt(0);
+    if (_totalHistory.length > _historyMax) _totalHistory.removeAt(0);
+
+    _frameCount++;
+    final now = DateTime.now();
+    if (now.difference(_lastFpsTime).inMilliseconds >= 1000) {
+      final avgMlKit  = _mlKitHistory.reduce((a, b) => a + b) ~/ _mlKitHistory.length;
+      final avgTflite = _tfliteHistory.where((v) => v > 0).isEmpty
+          ? 0
+          : _tfliteHistory.where((v) => v > 0).reduce((a, b) => a + b) ~/
+            _tfliteHistory.where((v) => v > 0).length;
+      final avgTotal  = _totalHistory.reduce((a, b) => a + b) ~/ _totalHistory.length;
+
+      if (mounted) {
+        setState(() {
+          _currentFps      = _frameCount;
+          _mlKitLatencyMs  = avgMlKit;
+          _tfliteLatencyMs = avgTflite;
+          _totalLatencyMs  = avgTotal;
+        });
+      }
+
+      // ── Log ke logcat agar bisa di-capture adb logcat ─────────────────
+      final ts = now.toIso8601String().substring(11, 19); // HH:mm:ss
+      debugPrint(
+        '[PERF] $ts | FPS:$_frameCount | '
+        'MLKit:${avgMlKit}ms | TFLite:${avgTflite}ms | Total:${avgTotal}ms',
+      );
+
+      _frameCount   = 0;
+      _lastFpsTime  = now;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -82,7 +135,9 @@ class _SmileTestScreenState extends State<SmileTestScreen>
       (c) => c.lensDirection == CameraLensDirection.front,
       orElse: () => _cameras!.first,
     );
-    _camera = CameraController(front, ResolutionPreset.medium, enableAudio: false);
+    // ResolutionPreset.low (~320×240) → lebih sedikit pixel = ML Kit lebih cepat = FPS naik.
+    // Ganti ke .medium jika kualitas bounding box kurang akurat.
+    _camera = CameraController(front, ResolutionPreset.low, enableAudio: false);
     await _camera!.initialize();
     await _camera!.startImageStream(_onFrame);
     if (mounted) setState(() => _isCameraReady = true);
@@ -92,14 +147,14 @@ class _SmileTestScreenState extends State<SmileTestScreen>
     if (_isProcessing || !mounted) return;
     _isProcessing = true;
 
+    final t0 = DateTime.now().millisecondsSinceEpoch;
+
     try {
       final cam = _cameras!.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.front,
         orElse: () => _cameras!.first,
       );
 
-      // ── Fix: Bangun bytes NV21 yang valid ──────────────────────────────
-      // Hanya 2 plane yang dibutuhkan: Y + interleaved VU
       final inputImage = _buildInputImage(image, cam);
       if (inputImage == null) {
         _isProcessing = false;
@@ -108,6 +163,7 @@ class _SmileTestScreenState extends State<SmileTestScreen>
 
       // ML Kit: deteksi wajah saja (hanya untuk bounding box)
       final faces = await _mlkitDetector!.processImage(inputImage);
+      final t1 = DateTime.now().millisecondsSinceEpoch;
 
       // Rule 1: Find largest face
       Face? largestFace;
@@ -143,22 +199,28 @@ class _SmileTestScreenState extends State<SmileTestScreen>
           largestFace.boundingBox,
           cam.sensorOrientation,
         ).then((result) {
+          final t2 = DateTime.now().millisecondsSinceEpoch;
           if (result != null && mounted) {
             setState(() {
               _mbSmileScore = result['smileScore'] ?? 0.0;
             });
             if (_mbSmileScore > _smileThreshold) HapticFeedback.lightImpact();
           }
+          // Record performance stats
+          _recordPerf(t1 - t0, t2 - t1, t2 - t0);
         }).catchError((e) {
           debugPrint('[SmileTest] TFLite error: $e');
         }).whenComplete(() {
           _isTFLiteProcessing = false;
         });
+      } else {
+        // Face not detected — still count ML Kit frames for FPS/latency
+        final t2 = DateTime.now().millisecondsSinceEpoch;
+        _recordPerf(t1 - t0, 0, t2 - t0);
       }
     } catch (e) {
       debugPrint('[SmileTest] Frame error: $e');
     } finally {
-      // Allow the next camera frame to be processed by ML Kit immediately
       _isProcessing = false;
     }
   }
@@ -281,6 +343,44 @@ class _SmileTestScreenState extends State<SmileTestScreen>
                     ),
                   ),
                   const Spacer(),
+                  // Toggle Performance Overlay
+                  GestureDetector(
+                    onTap: () => setState(() => _showPerfOverlay = !_showPerfOverlay),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: _showPerfOverlay
+                            ? Colors.cyanAccent.withOpacity(0.2)
+                            : Colors.white10,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _showPerfOverlay ? Colors.cyanAccent : Colors.white30,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.speed,
+                            color: _showPerfOverlay ? Colors.cyanAccent : Colors.white54,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'PERF',
+                            style: TextStyle(
+                              color: _showPerfOverlay ? Colors.cyanAccent : Colors.white54,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   // Status model
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -364,6 +464,18 @@ class _SmileTestScreenState extends State<SmileTestScreen>
                                             _faces,
                                             _imageSize!,
                                             _rotation!,
+                                          ),
+                                        ),
+                                      // ── Performance Overlay ──────────────
+                                      if (_showPerfOverlay)
+                                        Positioned(
+                                          top: 8,
+                                          left: 8,
+                                          child: _PerfOverlay(
+                                            fps: _currentFps,
+                                            mlKitMs: _mlKitLatencyMs,
+                                            tfliteMs: _tfliteLatencyMs,
+                                            totalMs: _totalLatencyMs,
                                           ),
                                         ),
                                     ],
@@ -531,6 +643,130 @@ class _ScoreCard extends StatelessWidget {
               color: color,
               fontSize: 22,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Performance Overlay Widget ────────────────────────────────────────────────
+class _PerfOverlay extends StatelessWidget {
+  final int fps;
+  final int mlKitMs;
+  final int tfliteMs;
+  final int totalMs;
+
+  const _PerfOverlay({
+    required this.fps,
+    required this.mlKitMs,
+    required this.tfliteMs,
+    required this.totalMs,
+  });
+
+  Color _latencyColor(int ms, int warn, int bad) {
+    if (ms >= bad) return Colors.redAccent;
+    if (ms >= warn) return Colors.orangeAccent;
+    return Colors.greenAccent;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fpsColor = fps >= 15
+        ? Colors.greenAccent
+        : fps >= 10
+            ? Colors.orangeAccent
+            : Colors.redAccent;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.cyanAccent.withOpacity(0.4), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.speed, color: Colors.cyanAccent, size: 12),
+              const SizedBox(width: 4),
+              Text(
+                'PERFORMANCE',
+                style: TextStyle(
+                  color: Colors.cyanAccent,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          _PerfRow(label: 'FPS', value: '$fps fps', color: fpsColor),
+          _PerfRow(
+            label: 'ML Kit',
+            value: '${mlKitMs}ms',
+            color: _latencyColor(mlKitMs, 50, 80),
+          ),
+          _PerfRow(
+            label: 'TFLite',
+            value: tfliteMs == 0 ? '--' : '${tfliteMs}ms',
+            color: tfliteMs == 0
+                ? Colors.white38
+                : _latencyColor(tfliteMs, 80, 120),
+          ),
+          const Divider(color: Colors.white24, height: 8, thickness: 0.5),
+          _PerfRow(
+            label: 'Total',
+            value: '${totalMs}ms',
+            color: _latencyColor(totalMs, 100, 150),
+            bold: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PerfRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final bool bold;
+
+  const _PerfRow({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.bold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 44,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],

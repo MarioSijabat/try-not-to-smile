@@ -55,6 +55,7 @@ class AdminPanelService {
     String? creditUid,
     List<String>? hashtags,
     int? durationSec,
+    String? categoryId,
   }) async {
     await _db.collection('active_videos').add({
       'title': title,
@@ -64,6 +65,7 @@ class AdminPanelService {
       'credit_uid': creditUid,
       'hashtags': hashtags ?? [],
       'duration_sec': durationSec,
+      'category_id': categoryId,
       'created_at': FieldValue.serverTimestamp(),
       'updated_at': FieldValue.serverTimestamp(),
       'published_by': publishedBy,

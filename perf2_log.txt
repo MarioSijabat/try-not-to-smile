@@ -1,0 +1,12 @@
+﻿03-05 10:09:21.006 I/flutter (  498): [TFLITE_PERF] Preprocess:211ms | Invoke:59ms | Total:275ms
+03-05 10:09:21.459 I/flutter (  498): [TFLITE_PERF] Preprocess:62ms | Invoke:14ms | Total:77ms
+03-05 10:09:21.728 I/flutter (  498): [TFLITE_PERF] Preprocess:16ms | Invoke:23ms | Total:40ms
+03-05 10:09:22.034 I/flutter (  498): [TFLITE_PERF] Preprocess:63ms | Invoke:18ms | Total:82ms
+03-05 10:09:22.326 I/flutter (  498): [TFLITE_PERF] Preprocess:19ms | Invoke:22ms | Total:43ms
+03-05 10:09:22.578 I/flutter (  498): [TFLITE_PERF] Preprocess:27ms | Invoke:23ms | Total:51ms
+03-05 10:09:22.873 I/flutter (  498): [TFLITE_PERF] Preprocess:9ms | Invoke:31ms | Total:41ms
+03-05 10:09:23.224 I/flutter (  498): [TFLITE_PERF] Preprocess:18ms | Invoke:56ms | Total:75ms
+03-05 10:09:23.479 I/flutter (  498): [TFLITE_PERF] Preprocess:7ms | Invoke:13ms | Total:20ms
+03-05 10:09:23.708 I/flutter (  498): [TFLITE_PERF] Preprocess:19ms | Invoke:11ms | Total:31ms
+03-05 10:09:23.931 I/flutter (  498): [TFLITE_PERF] Preprocess:7ms | Invoke:15ms | Total:23ms
+03-05 10:09:24.204 I/flutter (  498): [TFLITE_PERF] Preprocess:24ms | Invoke:28ms | Total:53ms

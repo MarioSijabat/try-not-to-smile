@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/admin_panel_service.dart';
 import '../services/video_storage_service.dart';
+import '../services/category_service.dart';
+import '../models/category_model.dart';
 import '../providers/auth_provider.dart';
 
 class AdminPanelScreen extends StatefulWidget {
@@ -21,11 +23,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
   // SERVICES
   final AdminPanelService _adminService = AdminPanelService();
   final VideoStorageService _storageService = VideoStorageService();
+  final CategoryService _categoryService = CategoryService();
 
   // STATE VARIABLES
   late TabController _tabController;
   List<Map<String, dynamic>> _submissions = [];
   List<Map<String, dynamic>> _activeVideos = [];
+  List<CategoryModel> _categories = [];
+  String? _selectedCategoryId;
   
   // ============ UPLOAD FORM CONTROLLERS ============
   final _titleController = TextEditingController();
@@ -65,6 +70,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
 
     _adminService.getActiveVideos().listen((videos) {
       if (mounted) setState(() => _activeVideos = videos);
+    });
+
+    _categoryService.getCategories().listen((cats) {
+      if (mounted) setState(() => _categories = cats);
     });
   }
 
@@ -166,6 +175,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
             : _creditUidController.text.trim(),
         hashtags: hashtags.isEmpty ? null : hashtags,
         durationSec: duration,
+        categoryId: _selectedCategoryId,
       );
 
       // 5. CLEAR FORM
@@ -189,6 +199,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
       _durationController.clear();
       _selectedVideoBytes = null;
       _selectedVideoName = null;
+      _selectedCategoryId = null;
     });
   }
 
@@ -279,6 +290,12 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
     return '-';
   }
   
+  String _getCategoryName(dynamic categoryId) {
+    if (categoryId == null) return '-';
+    final cat = _categories.where((c) => c.id == categoryId).firstOrNull;
+    return cat != null ? '${cat.icon} ${cat.name}' : categoryId.toString();
+  }
+
   void _showSuccessDialog(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.green),
@@ -578,6 +595,32 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
                   ),
                   const SizedBox(height: 24),
                   
+                  // 🏷️ CATEGORY DROPDOWN
+                  DropdownButtonFormField<String>(
+                    value: _selectedCategoryId,
+                    decoration: const InputDecoration(
+                      labelText: 'Kategori *',
+                      hintText: 'Pilih kategori video',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _categories.map((cat) {
+                      return DropdownMenuItem<String>(
+                        value: cat.id,
+                        child: Row(
+                          children: [
+                            Text(cat.icon, style: const TextStyle(fontSize: 18)),
+                            const SizedBox(width: 8),
+                            Text(cat.name),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: _isUploading
+                        ? null
+                        : (val) => setState(() => _selectedCategoryId = val),
+                  ),
+                  const SizedBox(height: 24),
+
                   // 🚀 UPLOAD BUTTON
                   SizedBox(
                     width: double.infinity,
@@ -664,6 +707,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> with SingleTickerPr
               children: [
                 const SizedBox(height: 4),
                 Text('Credit: ${video['credit_username'] ?? '-'}'),
+                Text(
+                  'Kategori: ${_getCategoryName(video['category_id'])}',
+                  style: TextStyle(
+                    color: Colors.blue[700],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 if (tagsList.isNotEmpty)
                   Text('Tags: ${tagsList.join(', ')}', maxLines: 1, overflow: TextOverflow.ellipsis),
                 Text('Duration: ${video['duration_sec'] ?? '-'}s'),

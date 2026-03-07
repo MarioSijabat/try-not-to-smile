@@ -1,4 +1,5 @@
 // lib/screens/swipeable_challenge_screen.dart
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,6 +42,18 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
   bool _challengeFailed = false;
   bool _processingFace = false;
   bool _isTFLiteProcessing = false;
+
+  // ── Face presence state ──────────────────────────────────────────────────
+  bool _isFaceDetected = false;
+  Timer? _noFaceTimer; // debounce agar tidak flicker
+
+  // ── Countdown & survival timer ────────────────────────────────────────────
+  bool _isCountingDown = false;
+  int _countdownValue = 3;
+  Timer? _countdownTimer;
+  int _survivalSeconds = 0;
+  Timer? _survivalTimer;
+  bool _countdownDone = false; // sudah pernah countdown untuk video ini?
 
   late PageController _pageController;
   String? _errorMessage;
@@ -124,7 +137,12 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
       _videoControllers[index] = ctrl;
 
       if (index == _currentIndex && mounted) {
-        ctrl.play();
+        // Video siap — mulai countdown kalau wajah sudah ada tapi countdown belum dimulai
+        if (!_countdownDone && !_isCountingDown && _isFaceDetected && !_challengeFailed) {
+          _startCountdown();
+        } else if (_countdownDone && !_challengeFailed) {
+          ctrl.play();
+        }
         setState(() {});
       } else if (mounted) {
         setState(() {});
@@ -141,11 +159,23 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
     // Pause previous
     _videoControllers[_currentIndex]?.pause();
 
+    // Hanya cancel timer yang perlu di-reset
+    _noFaceTimer?.cancel();
+    _noFaceTimer = null;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    // TIDAK cancel _survivalTimer — timer terus berjalan lintas video
+
     setState(() {
       _currentIndex = index;
       _smileCount = 0;
       _isSmiling = false;
       _challengeFailed = false;
+      _isFaceDetected = false;
+      _isCountingDown = false;
+      _countdownValue = 3;
+      _countdownDone = true;  // skip countdown saat swipe
+      // TIDAK reset _survivalSeconds — waktu terus berlanjut
     });
 
     // Resume image stream if it was stopped
@@ -155,11 +185,13 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
       _cameraController!.startImageStream(_processCameraImage);
     }
 
-    // Play new video (seek to start)
+    // Play new video langsung (tanpa countdown)
     final ctrl = _videoControllers[index];
     if (ctrl != null && ctrl.value.isInitialized) {
       ctrl.seekTo(Duration.zero);
       ctrl.play();
+      // Pastikan survival timer tetap jalan (start kalau belum)
+      if (_survivalTimer == null) _startSurvivalTimer();
     } else {
       _initVideoAt(index);
     }
@@ -211,6 +243,23 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
       }
 
       if (largestFace != null) {
+        // ── Wajah terdeteksi: cancel no-face timer ───────────────────────────
+        _noFaceTimer?.cancel();
+        _noFaceTimer = null;
+        if (!_isFaceDetected && mounted) {
+          setState(() => _isFaceDetected = true);
+          final ctrl = _videoControllers[_currentIndex];
+          final videoReady = ctrl != null && ctrl.value.isInitialized;
+          // Mulai countdown hanya kalau video sudah siap diputar
+          if (!_countdownDone && !_isCountingDown && !_challengeFailed && videoReady) {
+            _startCountdown();
+          } else if (_countdownDone && !_challengeFailed && videoReady) {
+            // Wajah kembali setelah sempat hilang — resume saja
+            ctrl.play();
+            if (_survivalTimer == null) _startSurvivalTimer();
+          }
+        }
+
         if (!_isTFLiteProcessing) {
           _isTFLiteProcessing = true;
           _smileService.detectSmile(
@@ -222,7 +271,8 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
               final double smileScore = result['smileScore'] ?? 0.0;
               final isCurrentlySmiling = smileScore > 0.55;
 
-              if (isCurrentlySmiling && !_isSmiling && !_challengeFailed) {
+              if (isCurrentlySmiling && !_isSmiling && !_challengeFailed && _countdownDone) {
+                _stopSurvivalTimer();
                 setState(() {
                   _isSmiling = true;
                   _smileCount++;
@@ -243,14 +293,68 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
           });
         }
       } else {
+        // ── Tidak ada wajah: debounce 1 detik sebelum pause ──────────────────
         if (_isSmiling && mounted) {
           setState(() => _isSmiling = false);
+        }
+        if (_isFaceDetected && _noFaceTimer == null && !_challengeFailed) {
+          _noFaceTimer = Timer(const Duration(seconds: 1), () {
+            if (mounted && !_challengeFailed) {
+              setState(() => _isFaceDetected = false);
+              _videoControllers[_currentIndex]?.pause();
+            }
+            _noFaceTimer = null;
+          });
         }
       }
     } catch (_) {
     } finally {
       _processingFace = false;
     }
+  }
+
+  // ── Countdown 3-2-1-GO ────────────────────────────────────────────────────
+  void _startCountdown() {
+    if (_isCountingDown) return;
+    setState(() {
+      _isCountingDown = true;
+      _countdownValue = 3;
+    });
+    // Pastikan video pause selama countdown
+    _videoControllers[_currentIndex]?.pause();
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) { timer.cancel(); return; }
+      if (_countdownValue > 1) {
+        setState(() => _countdownValue--);
+      } else {
+        timer.cancel();
+        setState(() {
+          _isCountingDown = false;
+          _countdownDone = true;
+          _survivalSeconds = 0;
+        });
+        // Mulai video + survival timer
+        if (!_challengeFailed) {
+          _videoControllers[_currentIndex]?.play();
+          _startSurvivalTimer();
+        }
+      }
+    });
+  }
+
+  // ── Survival Timer ────────────────────────────────────────────────────────
+  void _startSurvivalTimer() {
+    _survivalTimer?.cancel();
+    _survivalTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) { timer.cancel(); return; }
+      setState(() => _survivalSeconds++);
+    });
+  }
+
+  void _stopSurvivalTimer() {
+    _survivalTimer?.cancel();
+    _survivalTimer = null;
   }
 
   InputImage? _buildInputImage(CameraImage image, CameraDescription cam) {
@@ -320,8 +424,29 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
     }
   }
 
+  // ── Video end: auto-scroll atau success ───────────────────────────────────
+  void _onVideoEnd(int index) {
+    final isLastVideo = index >= widget.videos.length - 1;
+    if (!isLastVideo) {
+      // Ada video berikutnya — scroll otomatis
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    } else {
+      // Semua video sudah selesai — tampilkan dialog berhasil
+      _showSuccessDialog();
+    }
+  }
+
   // ── Dialogs ───────────────────────────────────────────────────────────────
+  String _formatSurvival(int secs) {
+    if (secs < 60) return '${secs}s';
+    return '${secs ~/ 60}m ${secs % 60}s';
+  }
+
   void _showFailDialog() {
+    final survived = _survivalSeconds;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -340,10 +465,51 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
                   fontSize: 20,
                   fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Smile count: $_smileCount',
-              style: const TextStyle(color: Colors.white70),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Column(
+                    children: [
+                      const Text('⏱️', style: TextStyle(fontSize: 22)),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatSurvival(survived),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Text('bertahan',
+                          style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                  Container(width: 1, height: 40, color: Colors.white24),
+                  Column(
+                    children: [
+                      const Text('😄', style: TextStyle(fontSize: 22)),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$_smileCount x',
+                        style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Text('senyum',
+                          style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -354,10 +520,13 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
               setState(() {
                 _challengeFailed = false;
                 _isSmiling = false;
+                _smileCount = 0;
+                _survivalSeconds = 0;
+                _countdownDone = false;
+                _countdownValue = 3;
               });
               _cameraController?.startImageStream(_processCameraImage);
               _videoControllers[_currentIndex]?.seekTo(Duration.zero);
-              _videoControllers[_currentIndex]?.play();
             },
             child: const Text('Coba Lagi',
                 style: TextStyle(color: Colors.orange)),
@@ -376,6 +545,8 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
   }
 
   void _showSuccessDialog() {
+    _stopSurvivalTimer();
+    final survived = _survivalSeconds;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -383,21 +554,46 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
         backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Icon(Icons.emoji_events, size: 56, color: Colors.amber),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            const Text(
               'Berhasil! 🎉',
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
                   fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 8),
-            Text(
-              'Kamu berhasil tidak tersenyum!',
-              style: TextStyle(color: Colors.white70),
-              textAlign: TextAlign.center,
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('⏱️', style: TextStyle(fontSize: 24)),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _formatSurvival(survived),
+                        style: const TextStyle(
+                          color: Colors.amber,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 22,
+                        ),
+                      ),
+                      const Text('tanpa senyum!',
+                          style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -414,6 +610,9 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
   // ── Dispose ───────────────────────────────────────────────────────────────
   @override
   void dispose() {
+    _noFaceTimer?.cancel();
+    _countdownTimer?.cancel();
+    _survivalTimer?.cancel();
     _pageController.dispose();
     _cameraController?.stopImageStream();
     _cameraController?.dispose();
@@ -519,7 +718,7 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
               return _VideoPage(
                 controller: ctrl,
                 video: widget.videos[index],
-                onVideoEnd: _showSuccessDialog,
+                onVideoEnd: () => _onVideoEnd(index),
               );
             },
           ),
@@ -534,14 +733,20 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
               height: 140,
               decoration: BoxDecoration(
                 border: Border.all(
-                    color: _isSmiling ? Colors.redAccent : Colors.white,
+                    color: _isSmiling
+                        ? Colors.redAccent
+                        : !_isFaceDetected && _isCameraInitialized
+                            ? Colors.orange
+                            : Colors.white,
                     width: 2.5),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
                     color: _isSmiling
                         ? Colors.red.withOpacity(0.5)
-                        : Colors.black38,
+                        : !_isFaceDetected && _isCameraInitialized
+                            ? Colors.orange.withOpacity(0.4)
+                            : Colors.black38,
                     blurRadius: 12,
                   ),
                 ],
@@ -557,38 +762,142 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
             ),
           ),
 
-          // ── Smile counter (top-left) ────────────────────────────────────
+          // ── No-face overlay ─────────────────────────────────────────────
+          if (!_isFaceDetected && _isCameraInitialized && !_challengeFailed)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: !_isFaceDetected ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 400),
+                  child: Container(
+                    color: Colors.black.withOpacity(0.55),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.orange, width: 2),
+                          ),
+                          child: const Icon(
+                            Icons.face_retouching_off,
+                            color: Colors.orange,
+                            size: 52,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'Wajah tidak terdeteksi',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            shadows: [Shadow(color: Colors.black, blurRadius: 8)],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Arahkan wajah ke kamera\nuntuk melanjutkan video',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // ── Smile counter + survival timer (top-left) ──────────────────────
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             left: 16,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black54,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _isSmiling ? Icons.tag_faces : Icons.mood,
-                    color: _isSmiling ? Colors.redAccent : Colors.white,
-                    size: 20,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Smile counter
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Smile: $_smileCount',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isSmiling ? Icons.tag_faces : Icons.mood,
+                        color: _isSmiling ? Colors.redAccent : Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Smile: $_smileCount',
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                // Survival timer (hanya tampil setelah countdown selesai)
+                if (_countdownDone && !_challengeFailed) ...[
+                  const SizedBox(height: 8),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _survivalSeconds >= 30
+                            ? Colors.amber
+                            : _survivalSeconds >= 10
+                                ? Colors.green
+                                : Colors.white24,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.timer,
+                          color: _survivalSeconds >= 30
+                              ? Colors.amber
+                              : _survivalSeconds >= 10
+                                  ? Colors.greenAccent
+                                  : Colors.white70,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          _formatSurvival(_survivalSeconds),
+                          style: TextStyle(
+                            color: _survivalSeconds >= 30
+                                ? Colors.amber
+                                : _survivalSeconds >= 10
+                                    ? Colors.greenAccent
+                                    : Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-              ),
+              ],
             ),
           ),
 
           // ── Back button ─────────────────────────────────────────────────
           Positioned(
-            top: MediaQuery.of(context).padding.top + 72,
+            top: MediaQuery.of(context).padding.top + 134,
             left: 16,
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
@@ -603,6 +912,40 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
               ),
             ),
           ),
+
+          // ── Countdown overlay ────────────────────────────────────────────
+          if (_isCountingDown)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  color: Colors.black.withOpacity(0.6),
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, anim) => ScaleTransition(
+                        scale: anim,
+                        child: FadeTransition(opacity: anim, child: child),
+                      ),
+                      child: Text(
+                        '$_countdownValue',
+                        key: ValueKey(_countdownValue),
+                        style: const TextStyle(
+                          fontSize: 120,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.orange,
+                              blurRadius: 40,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // ── Video counter & swipe hint (bottom center) ──────────────────
           if (widget.videos.length > 1)
