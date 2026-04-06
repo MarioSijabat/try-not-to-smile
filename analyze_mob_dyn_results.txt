@@ -1,0 +1,35 @@
+﻿=== HASIL ANALISIS MODEL MOBILENET (DYNAMIC RANGE) ===
+Total data points (sampel detik): 119
+Durasi pengujian: ~119 detik
+
+=== FPS ===
+Min : 1
+Max : 16
+Avg : 11.92
+
+=== ML Kit Latency (ms) ===
+Avg : 61.19
+Max : 388
+
+=== TFLite Latency (ms) ===
+Min : 50
+Max : 69
+Avg : 58.66
+Std : 4.353913055487482
+
+=== Total Latency (ms) ===
+Avg : 120.22
+
+=== ANALISIS STABILITAS (ROLLING WINDOW 30 DETIK) ===
+Window 1 (Detik 1-30):
+  Avg FPS         = 11.6
+  Avg TFLite Lat. = 56.3 ms
+  Avg Total Lat.  = 124.9 ms
+Window 2 (Detik 31-60):
+  Avg FPS         = 11.7
+  Avg TFLite Lat. = 60.4 ms
+  Avg Total Lat.  = 120.6 ms
+Window 3 (Detik 61-90):
+  Avg FPS         = 12.6
+  Avg TFLite Lat. = 56.7 ms
+  Avg Total Lat.  = 112.2 ms

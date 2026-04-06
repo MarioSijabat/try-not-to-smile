@@ -1,6 +1,7 @@
 // lib/screens/main_menu_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../models/category_model.dart';
 import '../providers/auth_provider.dart';
@@ -163,8 +164,18 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white54, width: 1.5),
+                    color: Colors.white10,
                   ),
-                  child: const Icon(Icons.person, color: Colors.white, size: 26),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: SvgPicture.asset(
+                      'assets/icons/Icon_profile.svg',
+                      colorFilter: const ColorFilter.mode(
+                        Colors.white,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -176,45 +187,15 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // ─── Title ───────────────────────────────────────────
-                    const Text(
-                      'TRY NOT TO',
-                      style: TextStyle(
-                        fontSize: 42,
-                        fontWeight: FontWeight.w900,
-                        fontStyle: FontStyle.italic,
-                        color: Colors.white,
-                        letterSpacing: 3,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _RainbowText(
-                          text: 'SMILE',
-                          fontSize: 52,
-                          colors: const [
-                            Color(0xFFFF3B30),
-                            Color(0xFFFF9500),
-                            Color(0xFFFFCC00),
-                            Color(0xFF34C759),
-                            Color(0xFF5856D6),
-                          ],
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('✦', style: TextStyle(color: Color(0xFFFFCC00), fontSize: 22)),
-                        const SizedBox(width: 2),
-                        const Text('✦', style: TextStyle(color: Color(0xFFFFD700), fontSize: 14)),
-                      ],
+                    SvgPicture.asset(
+                      "assets/icons/label_'smile'.svg",
+                      height: 125,
                     ),
 
                     const SizedBox(height: 56),
 
                     // ─── BOTHER ME button ─────────────────────────────────
-                    _GradientBorderButton(
-                      isLight: true,
+                    GestureDetector(
                       onTap: () {
                         if (videoProvider.isLoading) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -238,78 +219,55 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         }
                         _showCategoryPicker(videoProvider);
                       },
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.center,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 18, horizontal: 16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Text('✦',
-                                    style: TextStyle(
-                                        color: Color(0xFFFF6B9D),
-                                        fontSize: 16)),
-                                SizedBox(width: 10),
-                                Text(
-                                  'BOTHER ME!',
-                                  style: TextStyle(
-                                    color: Color(0xFF1A1A1A),
-                                    fontWeight: FontWeight.w900,
-                                    fontStyle: FontStyle.italic,
-                                    fontSize: 22,
-                                    letterSpacing: 2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Rainbow emoji — right side hanging over border
-                          const Positioned(
-                            right: -14,
-                            top: -14,
-                            child: Text('🌈',
-                                style: TextStyle(fontSize: 52),
-                                textAlign: TextAlign.center),
-                          ),
-                        ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Image.asset(
+                          'assets/icons/bother_me.jpeg',
+                          height: 95,
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
 
                     const SizedBox(height: 20),
 
                     // ─── TEST DETEKSI SENYUM button ───────────────────────
-                    _GradientBorderButton(
-                      isLight: false,
+                    GestureDetector(
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                             builder: (_) => const SmileTestScreen()),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 18, horizontal: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.face, color: Colors.greenAccent, size: 22),
-                            SizedBox(width: 10),
-                            Text(
-                              'TEST SENYUM',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                fontStyle: FontStyle.italic,
-                                fontSize: 20,
-                                letterSpacing: 2,
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Container(
+                          height: 75, // Menyamakan feel proporsi dengan tombol SVG (yang ada whitespace)
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF252525), // Flat dark color menyerupai style solid
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: Colors.white24, width: 2),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.face, color: Colors.greenAccent, size: 28),
+                              SizedBox(width: 12),
+                              Text(
+                                'TEST SENYUM',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontStyle: FontStyle.italic,
+                                  fontSize: 22,
+                                  letterSpacing: 2,
+                                ),
                               ),
-                            ),
-                            SizedBox(width: 10),
-                            Icon(Icons.chevron_right,
-                                color: Colors.white, size: 28),
-                          ],
+                              SizedBox(width: 12),
+                              Icon(Icons.chevron_right,
+                                  color: Colors.white54, size: 28),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -317,35 +275,18 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     const SizedBox(height: 20),
 
                     // ─── SEND FUNNY VIDS button ───────────────────────────
-                    _GradientBorderButton(
-                      isLight: false,
+                    GestureDetector(
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                             builder: (_) => SubmitVideoScreen()),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 18, horizontal: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Expanded(
-                              child: Text(
-                                'SEND FUNNY VIDS',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  fontStyle: FontStyle.italic,
-                                  fontSize: 20,
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                            ),
-                            Icon(Icons.chevron_right,
-                                color: Colors.white, size: 28),
-                          ],
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: SvgPicture.asset(
+                          'assets/icons/button_sendvideos.svg',
+                          height: 95,
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),

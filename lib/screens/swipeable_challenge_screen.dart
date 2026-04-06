@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:camera/camera.dart';
 import 'package:video_player/video_player.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
@@ -171,7 +172,7 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
       _smileCount = 0;
       _isSmiling = false;
       _challengeFailed = false;
-      _isFaceDetected = false;
+      // Jangan reset _isFaceDetected agar tidak muncul sekejap saat swipe
       _isCountingDown = false;
       _countdownValue = 3;
       _countdownDone = true;  // skip countdown saat swipe
@@ -446,102 +447,94 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
   }
 
   void _showFailDialog() {
-    final survived = _survivalSeconds;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Icon(Icons.sentiment_very_dissatisfied,
-            size: 56, color: Colors.redAccent),
-        content: Column(
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Kamu Senyum! 😄',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold),
+            // Gambar Game Over (Senyum) yang diperbesar seukuran bebas
+             Image.asset(
+              'assets/icons/got_a_smile.jpeg',
+              width: 250,
+              height: 250,
+              fit: BoxFit.contain,
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 30),
+            // Tombol Coba Lagi
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context); // Tutup dialog
+                _resetChallenge(); // Fungsi untuk mereset video dan state
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 4)),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.refresh, color: Colors.black, size: 24),
+                    SizedBox(width: 8),
+                    Text(
+                      'Coba Lagi',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Column(
-                    children: [
-                      const Text('⏱️', style: TextStyle(fontSize: 22)),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatSurvival(survived),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const Text('bertahan',
-                          style: TextStyle(color: Colors.white54, fontSize: 11)),
-                    ],
-                  ),
-                  Container(width: 1, height: 40, color: Colors.white24),
-                  Column(
-                    children: [
-                      const Text('😄', style: TextStyle(fontSize: 22)),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$_smileCount x',
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const Text('senyum',
-                          style: TextStyle(color: Colors.white54, fontSize: 11)),
-                    ],
-                  ),
-                ],
+            ),
+            const SizedBox(height: 16),
+            // Tombol Kembali
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Tutup dialog
+                Navigator.pop(context); // Kembali ke menu utama
+              },
+              child: const Text(
+                'Kembali',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
               ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _challengeFailed = false;
-                _isSmiling = false;
-                _smileCount = 0;
-                _survivalSeconds = 0;
-                _countdownDone = false;
-                _countdownValue = 3;
-              });
-              _cameraController?.startImageStream(_processCameraImage);
-              _videoControllers[_currentIndex]?.seekTo(Duration.zero);
-            },
-            child: const Text('Coba Lagi',
-                style: TextStyle(color: Colors.orange)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('Keluar',
-                style: TextStyle(color: Colors.white54)),
-          ),
-        ],
       ),
     );
+  }
+
+  void _resetChallenge() {
+    setState(() {
+      _challengeFailed = false;
+      _survivalSeconds = 0;
+      _smileCount = 0;
+      _isSmiling = false;
+      _countdownDone = false;
+      _countdownValue = 3;
+    });
+    
+    // Ulangi video yang sedang diputar dari awal
+    final videoInfo = widget.videos[_currentIndex];
+    final controller = _videoControllers[videoInfo.docId];
+    if (controller != null) {
+      if (controller.value.isInitialized) {
+         controller.seekTo(Duration.zero);
+         controller.pause(); // Pause sebentar menunggu countdown
+      }
+    }
+    _startCountdown();
   }
 
   void _showSuccessDialog() {
@@ -771,147 +764,51 @@ class _SwipeableChallengeScreenState extends State<SwipeableChallengeScreen> {
                   duration: const Duration(milliseconds: 400),
                   child: Container(
                     color: Colors.black.withOpacity(0.55),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.15),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.orange, width: 2),
-                          ),
-                          child: const Icon(
-                            Icons.face_retouching_off,
-                            color: Colors.orange,
-                            size: 52,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'Wajah tidak terdeteksi',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            shadows: [Shadow(color: Colors.black, blurRadius: 8)],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Arahkan wajah ke kamera\nuntuk melanjutkan video',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            shadows: [Shadow(color: Colors.black, blurRadius: 6)],
-                          ),
-                        ),
-                      ],
+                    child: Center(
+                      child: Image.asset(
+                        'assets/icons/no_face_detect.jpeg',
+                        width: 250, // Gambar no face detect super besar tanpa frame
+                        height: 250,
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
 
-          // ── Smile counter + survival timer (top-left) ──────────────────────
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
-            left: 16,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Smile counter
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isSmiling ? Icons.tag_faces : Icons.mood,
-                        color: _isSmiling ? Colors.redAccent : Colors.white,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Smile: $_smileCount',
-                        style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-                // Survival timer (hanya tampil setelah countdown selesai)
-                if (_countdownDone && !_challengeFailed) ...[
-                  const SizedBox(height: 8),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _survivalSeconds >= 30
-                            ? Colors.amber
-                            : _survivalSeconds >= 10
-                                ? Colors.green
-                                : Colors.white24,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.timer,
-                          color: _survivalSeconds >= 30
-                              ? Colors.amber
-                              : _survivalSeconds >= 10
-                                  ? Colors.greenAccent
-                                  : Colors.white70,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          _formatSurvival(_survivalSeconds),
-                          style: TextStyle(
-                            color: _survivalSeconds >= 30
-                                ? Colors.amber
-                                : _survivalSeconds >= 10
-                                    ? Colors.greenAccent
-                                    : Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
 
           // ── Back button ─────────────────────────────────────────────────
           Positioned(
-            top: MediaQuery.of(context).padding.top + 134,
+            top: MediaQuery.of(context).padding.top + 16,
             left: 16,
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.black54,
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(24),
                 ),
-                child: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.white, size: 18),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text(
+                      'Back',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+
 
           // ── Countdown overlay ────────────────────────────────────────────
           if (_isCountingDown)
@@ -1051,40 +948,58 @@ class _VideoPageState extends State<_VideoPage> {
           ),
         ),
 
-        // ── Video title & credit ─────────────────────────────────────────
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 60,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.video.title ?? 'Untitled',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
-                ),
-              ),
-              if (widget.video.creditUsername != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '@${widget.video.creditUsername}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ],
-          ),
-        ),
-
-        // ── Progress bar ─────────────────────────────────────────────────
+        // ── Footbar Video title & credit ─────────────────────────────────
         Positioned(
           left: 0,
           right: 0,
           bottom: 0,
+          child: Container(
+            color: Colors.black.withOpacity(0.65), // Footbar semi transparan
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 30),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.video.title ?? 'Untitled',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                if (widget.video.creditUsername != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'sended by: @${widget.video.creditUsername}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18, // Lebih besar
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                if (widget.video.hashtags != null && widget.video.hashtags!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.video.hashtags!.map((tag) => '#$tag').join(' '),
+                    style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+
+        // ── Progress bar dipindah di atas footbar ───────────────────────
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 120, // Diatas footbar
           child: VideoProgressIndicator(
             ctrl,
             allowScrubbing: false,

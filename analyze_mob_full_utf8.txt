@@ -1,0 +1,49 @@
+﻿=== DATA PENGUJIAN MODEL MOBILENET (FULL INT) ===
+Total data points (detik): 133
+Durasi pengujian: ~133 detik
+
+=== FPS ===
+Min : 1
+Max : 17
+Avg : 13.29
+Std : 1.9020800212877722
+
+=== ML Kit Latency (ms) ===
+Min : 37
+Max : 398
+Avg : 47.95
+Std : 31.04012940008214
+
+=== TFLite Latency (ms) ===
+Min : 38
+Max : 54
+Avg : 45.07
+Std : 3.8909286278077637
+
+=== Total Latency (ms) ===
+Min : 75
+Max : 452
+Avg : 93.51
+Std : 32.423713857661895
+
+=== ROLLING WINDOW (per 30 detik) ===
+Window 1 (s1-s30):
+  FPS avg  = 12.4
+  MLKit    = avg 59.6ms | min 37 | max 398 | range 361
+  TFLite   = avg 44.8ms | min 38 | max 54 | range 16
+  Total    = avg 105.1ms | min 75 | max 452 | range 377
+Window 2 (s31-s60):
+  FPS avg  = 13.2
+  MLKit    = avg 44.5ms | min 38 | max 56 | range 18
+  TFLite   = avg 44.9ms | min 39 | max 54 | range 15
+  Total    = avg 89.9ms | min 78 | max 110 | range 32
+Window 3 (s61-s90):
+  FPS avg  = 13.2
+  MLKit    = avg 45.2ms | min 38 | max 53 | range 15
+  TFLite   = avg 45.3ms | min 39 | max 52 | range 13
+  Total    = avg 91.1ms | min 77 | max 104 | range 27
+Window 4 (s91-s120):
+  FPS avg  = 14.0
+  MLKit    = avg 43.5ms | min 38 | max 56 | range 18
+  TFLite   = avg 44.9ms | min 38 | max 54 | range 16
+  Total    = avg 88.7ms | min 78 | max 110 | range 32

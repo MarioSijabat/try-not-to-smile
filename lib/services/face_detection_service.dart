@@ -1,8 +1,9 @@
 // lib/services/face_detection_service.dart
 //
-// Service inferensi MobileNet smile detection.
-// Model: mobilenet_quantized_dynamic.tflite
-// Input : [1, 224, 224, 3] Float32 — Z-Score normalized (baked in model)
+// Service inferensi smile detection.
+// Model AKTIF: model_mobilenet_quantized_dynamic.tflite
+// ⚠️  MODE BENCHMARK — throttle dinonaktifkan untuk pengambilan data skripsi
+// Input : [1, 224, 224, 3] Float32
 // Output: [1, 1]            Float32 — sigmoid binary
 //
 // Model input should strictly be raw RGB [0-255] as Z-score is inside the graph.
@@ -13,6 +14,7 @@
 import 'dart:ui' show Rect;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:developer';
 // image package removed — preprocessing now uses direct YUV sampling
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -22,11 +24,19 @@ class SmileDetectionService {
   bool _isInitialized = false;
   String modelInfo = 'Belum diinisialisasi';
 
-  // Throttle: max 1 TFLite inference per ~80ms (~12 FPS max untuk TFLite).
-  // Sebelumnya 200ms karena preprocessing lambat (~250ms). Sekarang sudah
-  // dioptimasi ke ~23ms sehingga throttle bisa diturunkan.
+  // Throttle (Pembatas FPS)
   DateTime _lastInference = DateTime.fromMillisecondsSinceEpoch(0);
-  static const int _throttleMs = 80;
+  
+  // =========================================================================
+  // ⚡ PENGATURAN MODE PENGUJIAN SKRIPSI (PILIH SALAH SATU)
+  // =========================================================================
+  
+  // [1] MODE BENCHMARK (Uncapped FPS murni, tanpa di rem - UNTUK AMBIL DATA SKRIPSI)
+  static const int _throttleMs = 0; 
+
+  // [2] MODE PRODUKSI / RILIS APLIKASI (Capped di 12.5 FPS agar HP tetap dingin)
+  // static const int _throttleMs = 80;
+  // =========================================================================
 
 
 
@@ -48,7 +58,7 @@ class SmileDetectionService {
       // }
 
       _interpreter = await Interpreter.fromAsset(
-        'assets/mobilenet_quantized_dynamic.tflite',
+        'assets/model_mobilenet_quantized_dynamic.tflite',
         options: options,
       );
       _isInitialized = true;
@@ -74,7 +84,10 @@ class SmileDetectionService {
     if (!_isInitialized || _interpreter == null) return null;
 
     final now = DateTime.now();
-    if (now.difference(_lastInference).inMilliseconds < _throttleMs) return null;
+    // Bypass throttle sama sekali jika _throttleMs di-set ke 0 (Mode Benchmark)
+    if (_throttleMs > 0 && now.difference(_lastInference).inMilliseconds < _throttleMs) {
+      return null;
+    }
     _lastInference = now;
 
     try {
@@ -109,18 +122,37 @@ class SmileDetectionService {
 
       // 2. Tulis data ke input tensor
       final inputTensor = _interpreter!.getInputTensor(0);
+      
+      // ── MENCEGAH CRASH (SIGSEGV): Periksa kecocokan ukuran memori ──
+      int expectedElements = 1;
+      for (var s in inputTensor.shape) {
+        if (s > 0) expectedElements *= s;
+      }
+      
+      if (flatInput.length != expectedElements) {
+        debugPrint(
+          '[SmileDetection] ❌ CRASH DENCEGAH: Ukuran model tidak cocok!\n'
+          'Model minta: $expectedElements angka float (Shape: ${inputTensor.shape})\n'
+          'Tapi kita beri: ${flatInput.length} angka float (224x224x3).'
+        );
+        return null;
+      }
+
       inputTensor.setTo(flatInput.buffer.asUint8List(
         flatInput.offsetInBytes,
         flatInput.lengthInBytes,
       ));
 
-      // 3. Cache outputTensor SEBELUM invoke
-      final outputTensor = _interpreter!.getOutputTensor(0);
-
       // 4. Jalankan TFLite inferensi — ukur waktu murni invoke()
       final tInferStart = DateTime.now().millisecondsSinceEpoch;
+      Timeline.startSync('TFLite_Invoke_Model');
       _interpreter!.invoke();
+      Timeline.finishSync();
       final tInferDone = DateTime.now().millisecondsSinceEpoch;
+      
+      // 3. Ambil outputTensor HARUS SETELAH invoke 
+      // (Mencegah Null Pointer C++ jika model melakukan re-alokasi tensor dinamis)
+      final outputTensor = _interpreter!.getOutputTensor(0);
 
       // ── Log breakdown waktu TFLite secara detail ──────────────────────
       final preMs   = tPreDone - tPreStart;
@@ -207,6 +239,7 @@ class _IsolateResult {
 /// yang SUDAH dirotasi (display-orientation). Kita inverse transform balik ke
 /// koordinat original YUV buffer.
 _IsolateResult _preprocessInIsolate(_IsolateData msg) {
+  Timeline.startSync('Preprocess_YUV_to_RGB_Isolate');
   final int imgW = msg.imgW;   // lebar frame kamera asli (kolom YUV)
   final int imgH = msg.imgH;   // tinggi frame kamera asli (baris YUV)
   final int so   = msg.sensorOrientation;
@@ -292,5 +325,6 @@ _IsolateResult _preprocessInIsolate(_IsolateData msg) {
     }
   }
 
+  Timeline.finishSync();
   return _IsolateResult(float32List: outBuf, debugJpegBytes: Uint8List(0));
 }

@@ -304,34 +304,82 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Icon(Icons.sentiment_very_dissatisfied, size: 50, color: Colors.red),
-        content: Column(
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Challenge Gagal!',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Image.asset(
+              'assets/icons/got_a_smile.jpeg',
+              width: 250,
+              height: 250,
+              fit: BoxFit.contain,
             ),
-            const SizedBox(height: 10),
-            const Text('Anda tersenyum!'),
-            Text(
-              'Smile count: $_smileCount',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            const SizedBox(height: 30),
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                _resetChallenge();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 4)),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.refresh, color: Colors.black, size: 24),
+                    SizedBox(width: 8),
+                    Text(
+                      'Coba Lagi',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text(
+                'Kembali',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('OK'),
-          ),
-        ],
       ),
     );
+  }
+
+  void _resetChallenge() {
+    setState(() {
+      _challengeActive = true;
+      _isSmiling = false;
+      _smileCount = 0;
+    });
+
+    _videoController?.seekTo(Duration.zero);
+    _videoController?.play();
+    
+    // Mulai lagi tangkapan frame kamera untuk diproses
+    if (_cameraController != null && !_cameraController!.value.isStreamingImages) {
+      _cameraController!.startImageStream(_processCameraImage);
+    }
   }
 
   void _endChallenge() {
@@ -357,10 +405,6 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
             ),
             const SizedBox(height: 10),
             const Text('Anda berhasil tidak tersenyum!'),
-            Text(
-              'Total smile detected: $_smileCount',
-              style: const TextStyle(fontSize: 14),
-            ),
           ],
         ),
         actions: [
@@ -486,19 +530,6 @@ class _ChallengeScreenState extends State<ChallengeScreen> {
                     _isModelReady ? Icons.psychology : Icons.psychology_outlined,
                     color: _isModelReady ? Colors.greenAccent : Colors.orange,
                     size: 18,
-                  ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    _isSmiling ? Icons.tag_faces : Icons.mood,
-                    color: _isSmiling ? Colors.red : Colors.white,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Smile: $_smileCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
                 ],
               ),

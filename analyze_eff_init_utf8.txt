@@ -1,0 +1,49 @@
+﻿=== DATA PENGUJIAN MODEL EFFICIENTNET (INITIALIZED) ===
+Total data points (detik): 123
+Durasi pengujian: ~123 detik
+
+=== FPS ===
+Min : 1
+Max : 9
+Avg : 4.66
+Std : 0.7556266348901802
+
+=== ML Kit Latency (ms) ===
+Min : 134
+Max : 406
+Avg : 176.50
+Std : 30.735352097965283
+
+=== TFLite Latency (ms) ===
+Min : 186
+Max : 256
+Avg : 217.65
+Std : 11.67734512539825
+
+=== Total Latency (ms) ===
+Min : 287
+Max : 662
+Avg : 391.33
+Std : 42.7784026891921
+
+=== ROLLING WINDOW (per 30 detik) ===
+Window 1 (s1-s30):
+  FPS avg  = 5.0
+  MLKit    = avg 178.2ms | min 147 | max 406 | range 259
+  TFLite   = avg 207.7ms | min 186 | max 256 | range 70
+  Total    = avg 374.0ms | min 287 | max 662 | range 375
+Window 2 (s31-s60):
+  FPS avg  = 4.7
+  MLKit    = avg 161.1ms | min 134 | max 188 | range 54
+  TFLite   = avg 211.0ms | min 202 | max 220 | range 18
+  Total    = avg 371.3ms | min 342 | max 405 | range 63
+Window 3 (s61-s90):
+  FPS avg  = 4.4
+  MLKit    = avg 163.3ms | min 134 | max 197 | range 63
+  TFLite   = avg 223.5ms | min 215 | max 233 | range 18
+  Total    = avg 387.2ms | min 356 | max 425 | range 69
+Window 4 (s91-s120):
+  FPS avg  = 4.5
+  MLKit    = avg 201.0ms | min 177 | max 238 | range 61
+  TFLite   = avg 227.9ms | min 216 | max 241 | range 25
+  Total    = avg 429.3ms | min 393 | max 471 | range 78

@@ -87,7 +87,8 @@ class _SmileTestScreenState extends State<SmileTestScreen>
 
       // ── Log ke logcat agar bisa di-capture adb logcat ─────────────────
       final ts = now.toIso8601String().substring(11, 19); // HH:mm:ss
-      debugPrint(
+      // ignore: avoid_print
+      print(
         '[PERF] $ts | FPS:$_frameCount | '
         'MLKit:${avgMlKit}ms | TFLite:${avgTflite}ms | Total:${avgTotal}ms',
       );
@@ -543,8 +544,8 @@ class _SmileTestScreenState extends State<SmileTestScreen>
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: _ScoreCard(
-                label: 'MobileNet Smile Score',
-                subtitle: 'Model custom (sigmoid)',
+                label: 'MobileNet (Dynamic) Score',
+                subtitle: 'model_mobilenet_quantized_dynamic.tflite',
                 score: _mbSmileScore,
                 color: Colors.orange,
                 isReady: _isModelReady,
